@@ -214,6 +214,7 @@ var switchToLiveBtn = document.getElementById('switchToLiveBtn');
 var liveWrap = document.getElementById('liveWrap');
 var focusHint = document.getElementById('focusHint');
 var mediaStream = null;
+var imageCapture = null;
 
 function startCamera(){
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return Promise.resolve(false);
@@ -226,6 +227,10 @@ function startCamera(){
     liveVideo.play().catch(function(){});
     liveCard.hidden = false;
     inputCard.hidden = true;
+    imageCapture = null;
+    if (window.ImageCapture){
+      try{ imageCapture = new ImageCapture(stream.getVideoTracks()[0]); }catch(e){ imageCapture = null; }
+    }
     return true;
   }).catch(function(){ return false; });
 }
@@ -235,6 +240,7 @@ function stopCamera(){
     mediaStream.getTracks().forEach(function(t){ t.stop(); });
     mediaStream = null;
   }
+  imageCapture = null;
 }
 
 function refocusCamera(){
@@ -255,7 +261,7 @@ function refocusCamera(){
 }
 liveWrap.addEventListener('click', refocusCamera);
 
-captureBtn.addEventListener('click', function(){
+function captureFromVideoFrame(){
   var canvas = document.createElement('canvas');
   canvas.width = liveVideo.videoWidth || 1280;
   canvas.height = liveVideo.videoHeight || 720;
@@ -263,6 +269,18 @@ captureBtn.addEventListener('click', function(){
   canvas.toBlob(function(blob){
     if (blob) handleFile(blob);
   }, 'image/jpeg', 0.92);
+}
+
+captureBtn.addEventListener('click', function(){
+  if (imageCapture && imageCapture.takePhoto){
+    imageCapture.takePhoto().then(function(blob){
+      handleFile(blob);
+    }).catch(function(){
+      captureFromVideoFrame();
+    });
+  } else {
+    captureFromVideoFrame();
+  }
 });
 
 switchToUploadBtn.addEventListener('click', function(){
