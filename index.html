@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>바코드 리마스터</title>
+<style>
+:root{
+  color-scheme: light dark;
+  --bg:#eef1f4;
+  --surface:#ffffff;
+  --surface-2:#f3f5f8;
+  --ink:#161b20;
+  --ink-dim:#5c6672;
+  --border:#d9dee3;
+  --accent:#d81f27;
+  --accent-ink:#ffffff;
+  --success:#157a42;
+  --success-bg:#e5f5eb;
+  --success-border:#bfe3cc;
+  --danger-bg:#fceaea;
+  --danger-border:#f3c6c6;
+  --focus:#2f6fed;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#101317;
+    --surface:#1a1f25;
+    --surface-2:#20262d;
+    --ink:#eef1f4;
+    --ink-dim:#96a1ac;
+    --border:#2b323a;
+    --accent:#ff5a5f;
+    --accent-ink:#1a0405;
+    --success:#3ecb84;
+    --success-bg:#123322;
+    --success-border:#1e5b3c;
+    --danger-bg:#3a1c1c;
+    --danger-border:#5c2b2b;
+    --focus:#6c9bff;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+.app{max-width:560px;margin:0 auto;padding:20px 16px 60px;display:flex;flex-direction:column;gap:18px}
+h1{font-size:22px;margin:0}
+.eyebrow{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--accent)}
+p.sub{color:var(--ink-dim);margin:0;max-width:52ch}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.btn{font:inherit;font-weight:600;font-size:13.5px;border-radius:9px;padding:10px 16px;border:1px solid transparent;cursor:pointer}
+.btn.primary{background:var(--accent);color:var(--accent-ink)}
+.btn.ghost{background:transparent;border-color:var(--border);color:var(--ink)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+input[type=text],input[type=password]{font:inherit;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--ink);width:100%}
+label.field{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--ink-dim)}
+.dropzone{border:1.5px dashed var(--border);border-radius:12px;padding:26px 16px;text-align:center;background:var(--surface-2);cursor:pointer}
+.dropzone.dragover{border-color:var(--accent);background:var(--danger-bg)}
+.dropzone p{margin:0;color:var(--ink-dim);font-size:13px}
+.preview{max-width:100%;border-radius:10px;border:1px solid var(--border)}
+.status-good{background:var(--success-bg);border:1px solid var(--success-border);color:var(--success);border-radius:10px;padding:12px;font-weight:600;font-size:13.5px}
+.status-bad{background:var(--danger-bg);border:1px solid var(--danger-border);border-radius:10px;padding:12px;font-size:13.5px}
+.qr-frame{background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px;display:flex;justify-content:center}
+.qr-frame img{max-width:100%;image-rendering:pixelated}
+.spinner{width:18px;height:18px;border-radius:50%;border:2px solid var(--border);border-top-color:var(--accent);animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.fs-overlay{position:fixed;inset:0;background:#fff;z-index:999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px}
+.fs-overlay img{max-width:92vw;max-height:80vh}
+.fs-close{position:absolute;top:16px;right:16px;background:#161b20;color:#fff;border:none;border-radius:8px;padding:8px 14px;font:inherit;font-weight:600;cursor:pointer}
+details summary{cursor:pointer;color:var(--ink-dim);font-size:13px}
+code{word-break:break-all;font-size:11px;color:var(--ink-dim)}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="eyebrow">서버 기반 · UB 바코드</div>
+    <h1>바코드 리마스터</h1>
+    <p class="sub">QR 사진만 서버로 보내 디코딩합니다 (처방전 전체 X). 서버가 처음 깨어날 때는 몇십 초 걸릴 수 있어요.</p>
+  </header>
+
+  <section class="card" id="settingsCard">
+    <div class="row" style="justify-content:space-between">
+      <b style="font-size:13px">서버 설정</b>
+      <button class="btn ghost" id="toggleSettings" style="font-size:12px;padding:5px 10px">접기</button>
+    </div>
+    <div id="settingsBody">
+      <label class="field">서버 주소 (Render URL)
+        <input type="text" id="serverUrl" placeholder="https://xxxx.onrender.com">
+      </label>
+      <label class="field">API 키
+        <input type="password" id="apiKey" placeholder="API 키">
+      </label>
+      <div class="row">
+        <button class="btn primary" id="saveSettings">저장</button>
+        <span id="saveStatus" style="font-size:12px;color:var(--ink-dim)"></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="card" id="inputCard">
+    <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
+    <input type="file" id="fileInput" accept="image/*" hidden>
+    <button class="btn primary" id="cameraBtn" style="width:100%;padding:13px">📷 카메라로 촬영</button>
+    <div class="dropzone" id="dropzone">
+      <p>기존 사진을 끌어놓거나 붙여넣거나 <button class="btn ghost" id="pickBtn" style="padding:4px 10px">파일 선택</button></p>
+    </div>
+  </section>
+
+  <section class="card" id="previewCard" hidden>
+    <img class="preview" id="previewImg" alt="업로드한 사진">
+    <div class="row">
+      <div id="loadingRow" class="row" hidden><div class="spinner"></div><span>서버에서 분석 중...</span></div>
+    </div>
+  </section>
+
+  <section class="card" id="resultCard" hidden></section>
+</div>
+
+<div class="fs-overlay" id="fsOverlay" hidden>
+  <button class="fs-close" id="fsClose">✕ 닫기</button>
+  <img id="fsImg" alt="큰 QR">
+  <p style="color:#333">이 화면을 리더기 앞에 두고 스캔하세요</p>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+var serverUrlInput = document.getElementById('serverUrl');
+var apiKeyInput = document.getElementById('apiKey');
+var saveStatus = document.getElementById('saveStatus');
+
+function loadSettings(){
+  try{
+    serverUrlInput.value = localStorage.getItem('br_server_url') || '';
+    apiKeyInput.value = localStorage.getItem('br_api_key') || '';
+  }catch(e){}
+}
+loadSettings();
+
+document.getElementById('saveSettings').addEventListener('click', function(){
+  try{
+    localStorage.setItem('br_server_url', serverUrlInput.value.trim().replace(/\/$/, ''));
+    localStorage.setItem('br_api_key', apiKeyInput.value.trim());
+    saveStatus.textContent = '저장됨 ✓';
+    setTimeout(function(){ saveStatus.textContent = ''; }, 1500);
+  }catch(e){
+    saveStatus.textContent = '저장 실패 (브라우저 저장소 접근 불가)';
+  }
+});
+
+var settingsBody = document.getElementById('settingsBody');
+var toggleBtn = document.getElementById('toggleSettings');
+function updateToggle(){
+  var hasUrl = !!(localStorage.getItem('br_server_url') || '');
+  if (hasUrl){ settingsBody.hidden = true; toggleBtn.textContent = '펼치기'; }
+}
+try{ updateToggle(); }catch(e){}
+toggleBtn.addEventListener('click', function(){
+  settingsBody.hidden = !settingsBody.hidden;
+  toggleBtn.textContent = settingsBody.hidden ? '펼치기' : '접기';
+});
+
+var dropzone = document.getElementById('dropzone');
+var fileInput = document.getElementById('fileInput');
+var pickBtn = document.getElementById('pickBtn');
+var cameraBtn = document.getElementById('cameraBtn');
+var cameraInput = document.getElementById('cameraInput');
+var previewCard = document.getElementById('previewCard');
+var previewImg = document.getElementById('previewImg');
+var loadingRow = document.getElementById('loadingRow');
+var resultCard = document.getElementById('resultCard');
+
+pickBtn.addEventListener('click', function(e){ e.stopPropagation(); fileInput.click(); });
+dropzone.addEventListener('click', function(){ fileInput.click(); });
+fileInput.addEventListener('change', function(){ if (fileInput.files[0]) handleFile(fileInput.files[0]); });
+cameraBtn.addEventListener('click', function(){ cameraInput.click(); });
+cameraInput.addEventListener('change', function(){
+  if (cameraInput.files[0]) handleFile(cameraInput.files[0]);
+  cameraInput.value = '';
+});
+['dragenter','dragover'].forEach(function(ev){
+  dropzone.addEventListener(ev, function(e){ e.preventDefault(); dropzone.classList.add('dragover'); });
+});
+['dragleave','drop'].forEach(function(ev){
+  dropzone.addEventListener(ev, function(e){ e.preventDefault(); dropzone.classList.remove('dragover'); });
+});
+dropzone.addEventListener('drop', function(e){
+  var f = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f) handleFile(f);
+});
+document.addEventListener('paste', function(e){
+  var items = (e.clipboardData || window.clipboardData).items;
+  if (!items) return;
+  for (var i = 0; i < items.length; i++){
+    if (items[i].type.indexOf('image/') === 0){ handleFile(items[i].getAsFile()); break; }
+  }
+});
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, function(c){
+    return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+  });
+}
+
+async function handleFile(file){
+  if (!file || file.type.indexOf('image/') !== 0) return;
+  var url;
+  try{ url = localStorage.getItem('br_server_url') || ''; }catch(e){ url = ''; }
+  if (!url){
+    alert('먼저 위에서 서버 주소를 입력하고 저장해주세요.');
+    settingsBody.hidden = false;
+    return;
+  }
+  var apiKey;
+  try{ apiKey = localStorage.getItem('br_api_key') || ''; }catch(e){ apiKey = ''; }
+
+  var objectUrl = URL.createObjectURL(file);
+  previewImg.src = objectUrl;
+  previewCard.hidden = false;
+  resultCard.hidden = true;
+  loadingRow.hidden = false;
+  previewCard.scrollIntoView({behavior:'smooth', block:'nearest'});
+
+  var fd = new FormData();
+  fd.append('image', file);
+
+  try{
+    var resp = await fetch(url + '/decode', {
+      method: 'POST',
+      headers: apiKey ? {'X-Api-Key': apiKey} : {},
+      body: fd
+    });
+    var j = await resp.json();
+    loadingRow.hidden = true;
+
+    if (resp.status === 401){
+      showFail('서버 인증 실패 — API 키를 다시 확인해주세요.');
+      return;
+    }
+    if (!j.ok){
+      if (j.error === 'not_found'){
+        showFail('서버에서도 이 사진은 디코딩하지 못했어요. 각도를 바꾸거나 손전등을 비춰서 다시 찍어보세요.');
+      } else {
+        showFail('오류: ' + (j.error || '알 수 없는 오류'));
+      }
+      return;
+    }
+    showSuccess(j);
+  }catch(err){
+    loadingRow.hidden = true;
+    showFail('서버에 연결하지 못했어요. 서버가 잠들어 있으면 깨어나는 데 최대 1분 정도 걸릴 수 있어요 — 잠시 후 다시 시도해보세요.<br>(' + escapeHtml(err.message || err) + ')');
+  }
+}
+
+var lastQrSrc = null;
+
+function showSuccess(j){
+  lastQrSrc = 'data:image/png;base64,' + j.qr_png_base64;
+  resultCard.hidden = false;
+  resultCard.innerHTML =
+    '<div class="status-good">✅ "' + escapeHtml(j.label) + '" 에서 인식 성공 (QR 자체 오류정정으로 검증됨)</div>' +
+    '<div class="qr-frame"><img id="qrImg" alt="재생성된 QR"></div>' +
+    '<div class="row"><button class="btn primary" id="bigBtn">리더기 앞에 크게 표시</button></div>';
+  document.getElementById('qrImg').src = lastQrSrc;
+  document.getElementById('bigBtn').addEventListener('click', openFullscreen);
+  resultCard.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+function showFail(msg){
+  resultCard.hidden = false;
+  resultCard.innerHTML = '<div class="status-bad">' + msg + '</div>';
+  resultCard.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+var fsOverlay = document.getElementById('fsOverlay');
+var fsImg = document.getElementById('fsImg');
+document.getElementById('fsClose').addEventListener('click', function(){ fsOverlay.hidden = true; });
+function openFullscreen(){
+  fsImg.src = lastQrSrc;
+  fsOverlay.hidden = false;
+  try{ fsOverlay.requestFullscreen && fsOverlay.requestFullscreen(); }catch(e){}
+}
+
+})();
+</script>
+</body>
+</html>
