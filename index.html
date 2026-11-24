@@ -57,6 +57,8 @@ label.field{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:va
 .dropzone{border:1.5px dashed var(--border);border-radius:12px;padding:26px 16px;text-align:center;background:var(--surface-2);cursor:pointer}
 .dropzone.dragover{border-color:var(--accent);background:var(--danger-bg)}
 .dropzone p{margin:0;color:var(--ink-dim);font-size:13px}
+.live-wrap{position:relative;border-radius:12px;overflow:hidden;background:#000}
+.live-wrap video{width:100%;max-height:70vh;display:block;object-fit:contain;background:#000}
 .preview{max-width:100%;border-radius:10px;border:1px solid var(--border)}
 .status-good{background:var(--success-bg);border:1px solid var(--success-border);color:var(--success);border-radius:10px;padding:12px;font-weight:600;font-size:13.5px}
 .status-bad{background:var(--danger-bg);border:1px solid var(--danger-border);border-radius:10px;padding:12px;font-size:13.5px}
@@ -99,6 +101,14 @@ code{word-break:break-all;font-size:11px;color:var(--ink-dim)}
     </div>
   </section>
 
+  <section class="card" id="liveCard" hidden>
+    <div class="live-wrap"><video id="liveVideo" autoplay playsinline muted></video></div>
+    <div class="row">
+      <button class="btn primary" id="captureBtn" style="flex:1;padding:14px">📸 촬영</button>
+      <button class="btn ghost" id="switchToUploadBtn">다른 방법</button>
+    </div>
+  </section>
+
   <section class="card" id="inputCard">
     <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
     <input type="file" id="fileInput" accept="image/*" hidden>
@@ -106,6 +116,7 @@ code{word-break:break-all;font-size:11px;color:var(--ink-dim)}
     <div class="dropzone" id="dropzone">
       <p>기존 사진을 끌어놓거나 붙여넣거나 <button class="btn ghost" id="pickBtn" style="padding:4px 10px">파일 선택</button></p>
     </div>
+    <button class="btn ghost" id="switchToLiveBtn" style="font-size:12px">📷 실시간 카메라로 전환</button>
   </section>
 
   <section class="card" id="previewCard" hidden>
@@ -146,6 +157,7 @@ document.getElementById('saveSettings').addEventListener('click', function(){
     localStorage.setItem('br_api_key', apiKeyInput.value.trim());
     saveStatus.textContent = '저장됨 ✓';
     setTimeout(function(){ saveStatus.textContent = ''; }, 1500);
+    if (typeof startCamera === 'function') startCamera();
   }catch(e){
     saveStatus.textContent = '저장 실패 (브라우저 저장소 접근 불가)';
   }
@@ -172,6 +184,64 @@ var previewCard = document.getElementById('previewCard');
 var previewImg = document.getElementById('previewImg');
 var loadingRow = document.getElementById('loadingRow');
 var resultCard = document.getElementById('resultCard');
+var inputCard = document.getElementById('inputCard');
+var liveCard = document.getElementById('liveCard');
+var liveVideo = document.getElementById('liveVideo');
+var captureBtn = document.getElementById('captureBtn');
+var switchToUploadBtn = document.getElementById('switchToUploadBtn');
+var switchToLiveBtn = document.getElementById('switchToLiveBtn');
+var mediaStream = null;
+
+function startCamera(){
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return Promise.resolve(false);
+  return navigator.mediaDevices.getUserMedia({
+    video: { facingMode: {ideal:'environment'}, width:{ideal:1920}, height:{ideal:1080} },
+    audio: false
+  }).then(function(stream){
+    mediaStream = stream;
+    liveVideo.srcObject = stream;
+    liveVideo.play().catch(function(){});
+    liveCard.hidden = false;
+    inputCard.hidden = true;
+    return true;
+  }).catch(function(){ return false; });
+}
+
+function stopCamera(){
+  if (mediaStream){
+    mediaStream.getTracks().forEach(function(t){ t.stop(); });
+    mediaStream = null;
+  }
+}
+
+captureBtn.addEventListener('click', function(){
+  var canvas = document.createElement('canvas');
+  canvas.width = liveVideo.videoWidth || 1280;
+  canvas.height = liveVideo.videoHeight || 720;
+  canvas.getContext('2d').drawImage(liveVideo, 0, 0, canvas.width, canvas.height);
+  canvas.toBlob(function(blob){
+    if (blob) handleFile(blob);
+  }, 'image/jpeg', 0.92);
+});
+
+switchToUploadBtn.addEventListener('click', function(){
+  stopCamera();
+  liveCard.hidden = true;
+  inputCard.hidden = false;
+});
+
+switchToLiveBtn.addEventListener('click', function(){ startCamera(); });
+
+document.addEventListener('visibilitychange', function(){
+  if (document.hidden){ stopCamera(); }
+  else if (liveCard.hidden === false && !mediaStream){ startCamera(); }
+});
+
+(function initAutoCamera(){
+  var hasUrl;
+  try{ hasUrl = !!(localStorage.getItem('br_server_url') || ''); }catch(e){ hasUrl = false; }
+  if (hasUrl) startCamera();
+})();
 
 pickBtn.addEventListener('click', function(e){ e.stopPropagation(); fileInput.click(); });
 dropzone.addEventListener('click', function(){ fileInput.click(); });
@@ -225,7 +295,7 @@ async function handleFile(file){
   previewCard.scrollIntoView({behavior:'smooth', block:'nearest'});
 
   var fd = new FormData();
-  fd.append('image', file);
+  fd.append('image', file, file.name || 'capture.jpg');
 
   try{
     var resp = await fetch(url + '/decode', {
